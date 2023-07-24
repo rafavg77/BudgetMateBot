@@ -1,7 +1,8 @@
 from telebot.types import Message
 
 def handle_start(bot, message):
-    bot.send_message(message.chat.id, "¡Hola! Soy un bot modular. ¡Comencemos! \nEstos son los comandos: \n /crearperfil \n/consultar_perfil \n/registrar_transaccion \n/consultar_transacciones ")
+    bot.send_message(message.chat.id, "¡Hola! Soy un bot modular. ¡Comencemos!\
+                    \nEstos son los comandos: \n /crearperfil \n/consultar_perfil \n/crear_tarjeta \n/consultar_tarjetas \n/registrar_transaccion \n/consultar_transacciones ")
 
 def handle_help(bot, message):
     bot.send_message(message.chat.id, "Este es un mensaje de ayuda.")

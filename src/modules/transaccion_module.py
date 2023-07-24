@@ -1,4 +1,4 @@
-from models.usuario import Usuario, Transaccion, session
+from models.usuario import Usuario, Tarjeta, Transaccion, session
 from telebot import types
 from datetime import datetime
 
@@ -13,11 +13,30 @@ class TransaccionGasto:
         # Habilitar el modo de guardar los controladores de pasos siguientes para esta conversación
         self.bot.enable_save_next_step_handlers()
 
-        # Pedir el nombre de la tarjeta al usuario
-        self.bot.send_message(chat_id, "Para registrar una transacción, primero necesito el nombre de la tarjeta.")
-        self.bot.register_next_step_handler(message, self.pedir_tipo_tarjeta)
+        usuario = session.query(Usuario).filter_by(telegram_id=chat_id).first()
+        tarjetas = session.query(Tarjeta).filter_by(usuario_id=usuario.usuario_id).all()
+        if usuario:
+            if tarjetas:
+                if not tarjetas:
+                    self.bot.disable_save_next_step_handlers()
+                    self.bot.send_message(chat_id, "Aún no tienes tarjetas registradas /registrar_tarjeta.")
+                else:
+                    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
+                    #mensaje_tarjetas = "Tus tarjetas son: \n"
+                    for tarjeta in tarjetas:
+                    #    mensaje_tarjetas += f"- {tarjeta.nombre_tarjeta}\n"
+                        markup.add(tarjeta.nombre_tarjeta)
+                    
+                    msg = self.bot.send_message(chat_id, "Selecciona la tarjeta ", reply_markup=markup)
+                    self.bot.register_next_step_handler(msg, self.tipo_gasto)
+            else:
+                self.bot.disable_save_next_step_handlers()
+                self.bot.send_message(chat_id, "NO tienes tarjetas registradas /registrar_tarjeta.")
+        else:
+            self.bot.disable_save_next_step_handlers()
+            self.bot.send_message(chat_id, "No tienes un perfil registrado, para registar utiliza /crearperfil.")
 
-    def pedir_tipo_tarjeta(self, message):
+    def tipo_gasto(self, message):
         # Obtener el chat_id del usuario
         chat_id = message.chat.id
 
@@ -25,27 +44,23 @@ class TransaccionGasto:
         nombre_tarjeta = message.text
 
         # Pedir el tipo de transacción al usuario (Ingreso o Egreso)
-        self.bot.send_message(chat_id, "¿La transacción es un Ingreso o un Egreso? Por favor, responde con 'Ingreso' o 'Egreso'.")
-        self.bot.register_next_step_handler(message, self.pedir_monto_tarjeta, nombre_tarjeta=nombre_tarjeta)
+        markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
+        markup.add('Ingreso','Egreso')
+        tipo_transaccion = self.bot.send_message(chat_id, "Selecciona el tipo de gasto.",reply_markup=markup)
+        self.bot.register_next_step_handler(message, self.pedir_monto_transaccion, nombre_tarjeta=nombre_tarjeta)
 
-    def pedir_monto_tarjeta(self, message, nombre_tarjeta):
+    def pedir_monto_transaccion(self, message, nombre_tarjeta):
         # Obtener el chat_id del usuario
         chat_id = message.chat.id
+        tipo_transaccion = message.text
+        nombre_tarjeta = nombre_tarjeta
+        print(tipo_transaccion, nombre_tarjeta)
 
-        # Obtener el tipo de transacción del mensaje anterior
-        tipo_transaccion = message.text.lower()
-
-        # Verificar que el tipo de transacción sea válido (Ingreso o Egreso)
-        if tipo_transaccion not in ['ingreso', 'egreso']:
-            self.bot.send_message(chat_id, "Tipo de transacción inválido. Por favor, responde con 'Ingreso' o 'Egreso'.")
-            self.bot.register_next_step_handler(message, self.pedir_monto_tarjeta, nombre_tarjeta=nombre_tarjeta)
-            return
-
-        # Pedir el monto de la transacción al usuario
         self.bot.send_message(chat_id, "Por favor, ingresa el monto de la transacción.")
-        self.bot.register_next_step_handler(message, self.pedir_descripcion_tarjeta, nombre_tarjeta=nombre_tarjeta, tipo_transaccion=tipo_transaccion)
+        self.bot.register_next_step_handler(message, self.pedir_descripcion_transaccion, nombre_tarjeta=nombre_tarjeta, tipo_transaccion=tipo_transaccion)
+        
 
-    def pedir_descripcion_tarjeta(self, message, nombre_tarjeta, tipo_transaccion):
+    def pedir_descripcion_transaccion(self, message, nombre_tarjeta, tipo_transaccion):
         # Obtener el chat_id del usuario
         chat_id = message.chat.id
 
@@ -57,7 +72,7 @@ class TransaccionGasto:
             monto_transaccion = float(monto_transaccion)
         except ValueError:
             self.bot.send_message(chat_id, "Monto inválido. Por favor, ingresa un número válido.")
-            self.bot.register_next_step_handler(message, self.pedir_descripcion_tarjeta, nombre_tarjeta=nombre_tarjeta, tipo_transaccion=tipo_transaccion)
+            self.bot.register_next_step_handler(message, self.pedir_monto_transaccion, nombre_tarjeta=nombre_tarjeta, tipo_transaccion=tipo_transaccion)
             return
 
         # Pedir la descripción de la transacción al usuario
@@ -78,19 +93,24 @@ class TransaccionGasto:
 
         # Consultar el perfil del usuario en base a su telegram_id
         usuario = session.query(Usuario).filter_by(telegram_id=telegram_id).first()
+        #tarjetas = session.query(Tarjeta).filter_by(nombre_tarjeta=nombre_tarjeta).first()
+        tarjeta = session.query(Tarjeta).filter(
+            Tarjeta.nombre_tarjeta == nombre_tarjeta,
+            Tarjeta.usuario_id == usuario.usuario_id
+        ).first()
 
-        # Crear la transacción y guardarla en la base de datos
-        nueva_transaccion = Transaccion(tarjeta=nombre_tarjeta, tipo=tipo_transaccion, monto=monto_transaccion,
-                                        descripcion=descripcion_transaccion, status=True, fecha_creacion=fecha_creacion)
-        usuario.transacciones.append(nueva_transaccion)
+        nueva_transaccion = Transaccion(tipo=tipo_transaccion, monto=monto_transaccion, descripcion=descripcion_transaccion,usuario_id=usuario.usuario_id,tarjeta_id=tarjeta.tarjeta_id)
         session.add(nueva_transaccion)
         session.commit()
+
+        # Cerrar la sesión
+        session.close()
+
+
     
         # Deshabilitar el modo de guardar los controladores de pasos siguientes para esta conversación
         self.bot.disable_save_next_step_handlers()
-        print(nombre_tarjeta, tipo_transaccion, monto_transaccion,
-                                        descripcion_transaccion, True, fecha_creacion)
-
+        
         # Enviar un mensaje de confirmación al usuario
         self.bot.send_message(chat_id, "Transacción registrada con éxito.")
     
