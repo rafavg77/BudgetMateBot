@@ -1,6 +1,6 @@
 from models.usuario import Usuario, Tarjeta, Transaccion, session
 from telebot import types
-from datetime import datetime
+#from datetime import datetime
 
 class TransaccionGasto:
     def __init__(self, bot):
@@ -87,7 +87,7 @@ class TransaccionGasto:
         descripcion_transaccion = message.text
 
         # Obtener la fecha de creación
-        fecha_creacion = datetime.utcnow()
+        #fecha_creacion = datetime.utcnow()
 
         telegram_id = message.from_user.id
 
@@ -114,34 +114,61 @@ class TransaccionGasto:
         # Enviar un mensaje de confirmación al usuario
         self.bot.send_message(chat_id, "Transacción registrada con éxito.")
     
+    def consultar_transacciones_tarjetas(self, message):
+        # Obtener el chat_id del usuario
+        print("consultar_transacciones_tarjetas")
+        chat_id = message.chat.id
+
+        # Habilitar el modo de guardar los controladores de pasos siguientes para esta conversación
+        self.bot.enable_save_next_step_handlers()
+
+        usuario = session.query(Usuario).filter_by(telegram_id=chat_id).first()
+        tarjetas = session.query(Tarjeta).filter_by(usuario_id=usuario.usuario_id).all()
+        if usuario:
+            if tarjetas:
+                if not tarjetas:
+                    self.bot.disable_save_next_step_handlers()
+                    self.bot.send_message(chat_id, "Aún no tienes tarjetas registradas /registrar_tarjeta.")
+                else:
+                    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
+                    #mensaje_tarjetas = "Tus tarjetas son: \n"
+                    for tarjeta in tarjetas:
+                    #    mensaje_tarjetas += f"- {tarjeta.nombre_tarjeta}\n"
+                        markup.add(tarjeta.nombre_tarjeta)
+                    
+                    msg = self.bot.send_message(chat_id, "Selecciona la tarjeta ", reply_markup=markup)
+                    self.bot.register_next_step_handler(msg, self.consultar_transacciones)
+            else:
+                self.bot.disable_save_next_step_handlers()
+                self.bot.send_message(chat_id, "NO tienes tarjetas registradas /registrar_tarjeta.")
+        else:
+            self.bot.disable_save_next_step_handlers()
+            self.bot.send_message(chat_id, "No tienes un perfil registrado, para registar utiliza /crearperfil.")
+
     def consultar_transacciones(self, message):
         # Obtener el chat_id del usuario
+        chat_id = message.chat.id
 
-        telegram_id = message.from_user.id
+        # Obtener el nombre de la tarjeta del mensaje anterior
+        nombre_tarjeta = message.text
+        
+        usuario = session.query(Usuario).filter_by(telegram_id=chat_id).first()
+        tarjeta = session.query(Tarjeta).filter(
+            Tarjeta.nombre_tarjeta == nombre_tarjeta,
+            Tarjeta.usuario_id == usuario.usuario_id
+        ).first()
 
-        # Consultar el perfil del usuario en base a su telegram_id
-        usuario = session.query(Usuario).filter_by(telegram_id=telegram_id).first()
+        trasnsacciones =  session.query(Transaccion).filter(
+            Transaccion.usuario_id == usuario.usuario_id,
+            Transaccion.tarjeta_id == tarjeta.tarjeta_id
+        ).all()
 
-        # Verificar si el usuario existe en la base de datos
-        if usuario:
-            # Obtener el usuario_id
-            usuario_id = usuario.usuario_id
-
-            # Consultar todas las transacciones del usuario
-            transacciones = session.query(Transaccion).filter_by(usuario_id=usuario_id).all()
-
-            # Verificar si el usuario tiene transacciones registradas
-            if not transacciones:
-                self.bot.send_message(telegram_id, "Aún no tienes transacciones registradas.")
-            else:
-                # Enviar las transacciones al usuario
-                mensaje_transacciones = "Tus transacciones:\n"
-                for transaccion in transacciones:
-                    mensaje_transacciones += f"- {transaccion.tarjeta} - {transaccion.tipo} - ${transaccion.monto} - {transaccion.descripcion} \n"
-
-                self.bot.send_message(telegram_id, mensaje_transacciones)
-
+        if trasnsacciones:
+            mensaje_transacciones = "Tus transacciones son: \n"
+            for transaccion in trasnsacciones:
+                mensaje_transacciones += f"-{transaccion.tipo}-{transaccion.monto}-{transaccion.descripcion}-{transaccion.fecha_creacion}\n"
+            self.bot.send_message(chat_id, mensaje_transacciones)
         else:
-            # Enviar un mensaje de que primero debe crear un perfil
-            self.bot.send_message(telegram_id, "Para consultar tus transacciones, primero debes crear tu perfil.")
+            self.bot.send_message(chat_id, "No tienes transacciones para esta tarjeta")
 
+        self.bot.disable_save_next_step_handlers()

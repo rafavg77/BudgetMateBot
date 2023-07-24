@@ -37,7 +37,7 @@ bot.message_handler(commands=['consultar_tarjetas'])(tarjeta_gasto.consultar_tar
 # Registrar las funciones de pefil de gasto
 transaccion_gasto = TransaccionGasto(bot)
 bot.message_handler(commands=['registrar_transaccion'])(transaccion_gasto.registrar_transaccion)
-bot.message_handler(commands=['consultar_transacciones'])(transaccion_gasto.consultar_transacciones)
+bot.message_handler(commands=['consultar_transacciones_tarjetas'])(transaccion_gasto.consultar_transacciones_tarjetas)
 
 # Iniciar el bot y mantenerlo en ejecución
 bot.polling()
