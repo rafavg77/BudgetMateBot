@@ -1,10 +1,20 @@
 from models.usuario import Usuario, Tarjeta, Transaccion, session
 from telebot import types
-#from datetime import datetime
 
 class TransaccionGasto:
     def __init__(self, bot):
         self.bot = bot
+
+    def cancelar_registro(self, message):
+        # Obtener el chat_id del usuario
+        chat_id = message.chat.id
+
+        # Deshabilitar el modo de guardar los controladores de pasos siguientes para esta conversación
+        self.bot.disable_save_next_step_handlers()
+
+        # Enviar un mensaje de confirmación de cancelación al usuario
+        self.bot.send_message(chat_id, "Registro de transacción cancelado. Volviendo al menú principal.")
+
 
     def registrar_transaccion(self, message):
         # Obtener el chat_id del usuario
@@ -151,24 +161,125 @@ class TransaccionGasto:
 
         # Obtener el nombre de la tarjeta del mensaje anterior
         nombre_tarjeta = message.text
-        
+
         usuario = session.query(Usuario).filter_by(telegram_id=chat_id).first()
         tarjeta = session.query(Tarjeta).filter(
             Tarjeta.nombre_tarjeta == nombre_tarjeta,
             Tarjeta.usuario_id == usuario.usuario_id
         ).first()
 
-        trasnsacciones =  session.query(Transaccion).filter(
+        transacciones = session.query(Transaccion).filter(
             Transaccion.usuario_id == usuario.usuario_id,
             Transaccion.tarjeta_id == tarjeta.tarjeta_id
         ).all()
 
-        if trasnsacciones:
-            mensaje_transacciones = "Tus transacciones son: \n"
-            for transaccion in trasnsacciones:
-                mensaje_transacciones += f"-{transaccion.tipo}-{transaccion.monto}-{transaccion.descripcion}-{transaccion.fecha_creacion}\n"
+        if transacciones:
+            ingreso_total = 0
+            egreso_total = 0
+
+            for transaccion in transacciones:
+                if transaccion.tipo == "Ingreso":
+                    ingreso_total += transaccion.monto
+                elif transaccion.tipo == "Egreso":
+                    egreso_total += transaccion.monto
+
+            resultado = ingreso_total - egreso_total
+
+            mensaje_transacciones = f"Tus transacciones para {nombre_tarjeta} son:\n"
+            for transaccion in transacciones:
+                mensaje_transacciones += f"- {transaccion.tipo}: {transaccion.monto}\n"
+            mensaje_transacciones += f"\nTotal de Ingresos: {ingreso_total}\n"
+            mensaje_transacciones += f"Total de Egresos: {egreso_total}\n"
+            mensaje_transacciones += f"Resultado (Ingresos - Egresos): {resultado}"
+
             self.bot.send_message(chat_id, mensaje_transacciones)
+
+            # Ahora, creamos el "inline keyboard" para presentar opciones de modificación
+            markup = types.InlineKeyboardMarkup()
+
+            # Opción para NO modificar ninguna transacción
+            markup.add(types.InlineKeyboardButton("No modificar ninguna transacción", callback_data="no_modificar"))
+
+            # Opción para modificar alguna transacción
+            markup.add(types.InlineKeyboardButton("Modificar transacción", callback_data="modificar"))
+
+            # Enviamos el mensaje con el "inline keyboard"
+            self.bot.send_message(chat_id, "¿Deseas modificar alguna transacción?", reply_markup=markup)
         else:
             self.bot.send_message(chat_id, "No tienes transacciones para esta tarjeta")
 
         self.bot.disable_save_next_step_handlers()
+
+    def on_callback_query(self, callback_query):
+        # Obtener el chat_id del usuario
+        chat_id = callback_query.message.chat.id
+
+        # Obtener el callback_data para saber qué opción se seleccionó
+        callback_data = callback_query.data
+        print(callback_data)
+
+        if callback_data == "no_modificar":
+            # Si selecciona "No modificar ninguna transacción", no se hace nada y la conversación termina
+            self.bot.send_message(chat_id, "Entendido. No se realizarán modificaciones.")
+        elif callback_data == "modificar":
+            # Si selecciona "Modificar transacción", podemos continuar con el proceso de modificación
+            # Puedes implementar aquí la lógica para modificar la transacción (por ejemplo, solicitar el ID de la transacción a modificar)
+            self.bot.send_message(chat_id, "Ingresa el ID de la transacción que deseas modificar.")
+            # Registramos el siguiente paso para manejar la entrada del ID de transacción a modificar
+            self.bot.register_next_step_handler(callback_query.message, self.modificar_transaccion)
+
+        elif callback_data.startswith("eliminar_transaccion:"):
+            # Si el callback_data inicia con "eliminar_transaccion_", significa que el usuario seleccionó eliminar una transacción
+            id_transaccion = callback_data.split(":")[1]
+
+            # Consultar la transacción en base al ID proporcionado y al usuario
+            usuario = session.query(Usuario).filter_by(telegram_id=chat_id).first()
+            transaccion = session.query(Transaccion).filter_by(transaccion_id=id_transaccion, usuario_id=usuario.usuario_id).first()
+
+            if transaccion:
+                # Si se encontró la transacción, procedemos a eliminarla de la base de datos
+                session.delete(transaccion)
+                session.commit()
+                self.bot.send_message(chat_id, f"La transacción con ID {id_transaccion} ha sido eliminada exitosamente.")
+            else:
+                # Si no se encontró la transacción, enviamos un mensaje de error
+                self.bot.send_message(chat_id, f"No se encontró una transacción con ID {id_transaccion} asociada a tu usuario.")
+        else:
+            # Si el callback_data no es reconocido, simplemente enviamos un mensaje de error
+            self.bot.send_message(chat_id, "Opción no válida.")
+
+    def modificar_transaccion(self, message):
+        # Obtener el chat_id del usuario
+        chat_id = message.chat.id
+
+        # Obtener el ID de la transacción a modificar
+        id_transaccion = message.text
+
+        # Consultar el perfil del usuario en base a su telegram_id
+        usuario = session.query(Usuario).filter_by(telegram_id=chat_id).first()
+
+        # Consultar la transacción específica en base al ID proporcionado y al usuario
+        transaccion = session.query(Transaccion).filter_by(transaccion_id=id_transaccion, usuario_id=usuario.usuario_id).first()
+
+        if transaccion:
+            # Si se encontró la transacción, creamos un "inline keyboard" con una opción para eliminar la transacción
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("Eliminar transacción", callback_data=f"eliminar_transaccion:{id_transaccion}"))
+
+            # Enviamos un mensaje al usuario con la información de la transacción y las opciones de eliminar
+            self.bot.send_message(chat_id, f"Información de la transacción:\n"
+                                        f"Tipo: {transaccion.tipo}\n"
+                                        f"Monto: {transaccion.monto}\n"
+                                        f"Descripción: {transaccion.descripcion}\n"
+                                        f"Fecha de Creación: {transaccion.fecha_creacion}\n\n"
+                                        f"¿Deseas eliminar esta transacción?", reply_markup=markup)
+        else:
+            # Si no se encontró la transacción, enviamos un mensaje de error
+            self.bot.send_message(chat_id, f"No se encontró una transacción con ID {id_transaccion} asociada a tu usuario.")
+
+    
+    def register_transaccion_commands(self, bot):
+        bot.message_handler(commands=['registrar_transaccion'])(self.registrar_transaccion)
+        bot.message_handler(commands=['cancelar'])(self.cancelar_registro)
+        bot.message_handler(commands=['consultar_transacciones_tarjetas'])(self.consultar_transacciones_tarjetas)
+        bot.callback_query_handler(func=lambda call: True)(self.on_callback_query)

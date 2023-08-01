@@ -68,4 +68,8 @@ class PerfilGasto:
             respuesta = "No se encontró un perfil asociado a tu Telegram ID."
 
         # Enviar la respuesta al usuario
-        self.bot.send_message(chat_id, respuesta)    
+        self.bot.send_message(chat_id, respuesta)
+
+    def register_perfil_commands(self, bot):
+        bot.message_handler(commands=['crearperfil'])(self.crear_perfil)
+        bot.message_handler(commands=['consultar_perfil'])(self.consultar_perfil)

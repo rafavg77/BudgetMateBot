@@ -67,3 +67,7 @@ class TarjetaGasto:
                 self.bot.send_message(telegram_id, mensaje_tarjetas)
         else:
             self.bot.send_message(telegram_id, "Para consultar tus tarjetas, primero debes crear tus tarjetas en /registrar_tarjeta.")
+
+    def register_tarjeta_commands(self, bot):
+        bot.message_handler(commands=['crear_tarjeta'])(self.crear_tarjeta)
+        bot.message_handler(commands=['consultar_tarjetas'])(self.consultar_tarjetas)

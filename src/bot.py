@@ -11,6 +11,8 @@ config = load_config()
 
 # Inicializar el bot con el token
 bot = telebot.TeleBot(config['BOT_TOKEN'])
+BOT_MASTER = config.get('BOT_MASTER')
+BOOT_MESSAGE = config.get('BOOT_MESSAGE')
 
 # Configurar el logger
 logging.basicConfig(
@@ -25,19 +27,16 @@ logger = logging.getLogger(__name__)
 # Registrar las funciones de manejo de comandos automáticamente
 register_commands(bot)
 
-# Registrar las funciones de pefil de gasto
 perfil_gasto = PerfilGasto(bot)
-bot.message_handler(commands=['crearperfil'])(perfil_gasto.crear_perfil)
-bot.message_handler(commands=['consultar_perfil'])(perfil_gasto.consultar_perfil)
+perfil_gasto.register_perfil_commands(bot)
 
 tarjeta_gasto = TarjetaGasto(bot)
-bot.message_handler(commands=['crear_tarjeta'])(tarjeta_gasto.crear_tarjeta)
-bot.message_handler(commands=['consultar_tarjetas'])(tarjeta_gasto.consultar_tarjetas)
+tarjeta_gasto.register_tarjeta_commands(bot)
 
-# Registrar las funciones de pefil de gasto
 transaccion_gasto = TransaccionGasto(bot)
-bot.message_handler(commands=['registrar_transaccion'])(transaccion_gasto.registrar_transaccion)
-bot.message_handler(commands=['consultar_transacciones_tarjetas'])(transaccion_gasto.consultar_transacciones_tarjetas)
+transaccion_gasto.register_transaccion_commands(bot)
 
 # Iniciar el bot y mantenerlo en ejecución
-bot.polling()
+logger.info(BOOT_MESSAGE)
+bot.send_message(BOT_MASTER, BOOT_MESSAGE)
+bot.polling(none_stop=True, timeout=123)
