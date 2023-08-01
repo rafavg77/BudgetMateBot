@@ -1,0 +1,15 @@
+[Unit]
+Description=Bot para registar Ingresos y Egresos
+
+Wants=network.target
+After=network.target
+
+[Service]
+ExecStart=/home/pi/Developer/BudgetMateBot/venv/bin/python3 /home/pi/Developer/BudgetMateBot/src/bot.py
+Restart=on-failure
+RestartSec=10
+SyslogIdentifier=BudgetMateBot
+User=pi
+
+[Install]
+WantedBy=multi-user.target
